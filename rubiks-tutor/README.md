@@ -1,101 +1,137 @@
 # Rubik's Cube Tutor — for six-year-olds
 
-This is **not an app**. There is no solver, no backend, no API calls, and
-nothing here runs unattended. It is one self-contained HTML template
-(`cube-step-template.html`) that draws a single, unambiguous instruction
-card: the cube's current state, the one face to turn, and which way.
+## Status (read this first)
 
-The actual tutoring — reading the child's cube, working out the beginner
-method solve, deciding what the next move should be, writing the "why" —
-is done by an AI (Claude) live in conversation with the child (or their
-adult). The template's only job is to guarantee that picture is drawn
-**exactly the same way every time**, so the person on the other end of
-the conversation is always looking at the same thing the AI is describing.
+**Works today, fully verified against a real physical cube:**
+- `cube-step-template.html` — the one-step instruction card (net diagram
+  + arrow-free overview, plus a big arrow'd close-up of the face to
+  turn, plus a hidden "why" toggle). This is what actually ran the live
+  trial below.
+- `solver/engine.js` — a cube-physics engine (given a state + one move,
+  returns the new state). Cross-checked against **four real moves**
+  performed on an actual physical cube during the trial (see "Trial
+  data" below) — every prediction matched exactly.
+- `solver/solve.js` — automated solving via search (IDA*). The **cross
+  and first-layer corners solve reliably in under a second.** Second-
+  layer edges usually do too, but **one case in the trial run
+  repeatedly failed to finish even after several minutes of tuning**
+  (see "Known issue" below) — that's where work stopped.
 
-## Why a template instead of an app
+**Not working yet / in progress:**
+- Second-layer edges: fast most of the time, but not reliably fast for
+  every configuration. Needs a fix before it can be trusted to run
+  unattended.
+- Last layer (orient edges → orient corners → permute corners → permute
+  edges): two approaches were started and neither is finished —
+  `idaSearch` (in `solve.js`, times out / needs too much depth for this
+  subproblem as currently written) and a known-algorithm approach (in
+  `solver/lastlayer.js`, scaffolded but not yet verified against a real
+  state).
+- `solver/generate-viewer.js` + `solver/viewer-template.html` — a
+  multi-step, click-through viewer (Next/Back buttons, one page for the
+  *whole* solve instead of republishing a card every turn) built to fix
+  the "3+ minutes per turn" problem from doing this conversationally.
+  The rendering side is done; it's wired up to read a solver-generated
+  move list but hasn't run end-to-end since the solver isn't finished.
 
-The alternative — a real web app with a built-in solving engine — would
-mean either shipping a cube-solving algorithm (a fixed, un-adaptive
-"expert system") or wiring the page up to call an LLM API on every move,
-which costs tokens and adds infrastructure for no real benefit. Since the
-tutoring already happens inside a conversation with an AI, the AI can
-just *be* the solver each turn. The template exists only to remove
-drawing/labeling drift between turns — the one place a plain chat
-response is genuinely worse than a picture.
+## Known issue: last-layer / hard-piece search performance
 
-## How a session works
+`solve.js`'s `idaSearch` uses a heuristic based only on the *current*
+subgoal (e.g. "these 2 facelets need to match"), deliberately decoupled
+from the "don't disturb what's already solved" constraint — because real
+disturb-then-restore algorithms are how cube solving actually works, and
+penalizing every intermediate disturbance in the heuristic makes IDA*
+pathologically slow to find them. That fixed *some* slow cases but not
+all: at least one second-layer-edge placement in the trial's actual
+scramble still didn't finish in under 150 seconds even with a
+transposition table and move-order pruning added. Budgets in `solve.js`
+are currently capped at 20s per phase so a re-run fails fast instead of
+hanging — expect it to throw on hard configurations right now.
 
-1. **Capture the cube.** The child (or adult) describes the cube in
-   plain language — colors and where they sit. The tutor translates this
-   into the `CUBE_STATE` schema below.
-2. **Pick an orientation and stick to it for the whole solve** — e.g.
-   "white on top, green facing you." Every instruction is relative to
-   this fixed orientation so "turn the right layer" always means the
-   same physical thing.
-3. **Solve using the beginner layer-by-layer method**, broken into
-   single quarter-turns — never a multi-move algorithm bundled into one
-   step. Phases, in order:
-   1. White cross
-   2. White corners (finishes the first layer)
-   3. Second-layer edges
-   4. Yellow cross
-   5. Yellow edges (orient the last layer)
-   6. Position yellow corners
-   7. Orient yellow corners (solved!)
-4. **One step, one card.** For each quarter-turn, fill in the `CONFIG`
-   block in `cube-step-template.html` (current state, the move, the
-   instruction, the why) and publish it as a one-off Artifact/picture.
-5. **Confirm before advancing.** After the child turns the cube, the
-   tutor asks what they see (or the child reports it) before generating
-   the next card — this catches a wrong turn immediately instead of
-   compounding it.
-6. **Two passes, one toggle.** Every card ships with the reasoning
-   hidden behind a "Why this move?" button, off by default. First time
-   through a solve, the child just follows the arrows to get the feel of
-   it. On a second pass (or anytime, if they're curious), they tap the
-   button to see why that move was the right one. This is a single
-   card design serving both of the user's stated goals — "solve first,
-   explain second" — rather than generating two different artifacts.
+**Most promising next step:** finish the `solver/lastlayer.js` approach
+(well-known, standard last-layer algorithms, translated from the usual
+"last layer on U" convention to this project's "last layer on D" setup,
+and *verified* against real engine output rather than trusted from
+memory) — this sidesteps search entirely and should be both fast and
+reliable. It was scaffolded but not yet tested against a live state
+when work paused. The same technique (a small library of known
+algorithms + verification, instead of open-ended search) would likely
+also fix the flaky second-layer-edge case.
 
-## `CUBE_STATE` schema
+## Trial data (ground truth — reuse this, don't re-derive it)
 
-Six faces, each a 3×3 grid, **row-major, top-left to bottom-right, as
-seen looking straight at that face from outside the cube**:
+This exact state and move sequence were **physically performed and
+independently confirmed** against a real cube during the live trial.
+Treat it as ground truth for testing the solver — no need to re-verify
+the engine against a physical cube again.
 
+Colors on this particular cube: orange, green, red, blue, yellow, black
+(no white; opposite pairs are Yellow↔Black, Green↔Blue, Red↔Orange).
+
+Initial scrambled state:
 ```js
-const CUBE_STATE = {
-  U: [ /* 9 colors */ ],  // up
-  D: [ /* 9 colors */ ],  // down
-  F: [ /* 9 colors */ ],  // front
-  B: [ /* 9 colors */ ],  // back
-  L: [ /* 9 colors */ ],  // left
-  R: [ /* 9 colors */ ],  // right
-};
+{
+  U: ["G","B","O", "Y","Y","K", "K","R","B"],
+  F: ["B","G","O", "B","G","B", "G","R","Y"],
+  L: ["K","O","R", "O","R","O", "Y","K","K"],
+  R: ["K","O","Y", "Y","O","R", "B","G","R"],
+  B: ["G","K","R", "Y","B","G", "Y","Y","B"],
+  D: ["O","B","O", "R","K","K", "R","G","G"],
+}
 ```
 
-Colors are single letters: `W` `Y` `R` `O` `G` `B` (white, yellow, red,
-orange, green, blue).
+Four moves physically performed and confirmed (in this order): `F`
+(clockwise), `D2`, `B2`, `L` (clockwise, in this engine's convention —
+see `solver/test-engine.js` for how that was pinned down against a
+transcription that initially looked rotated/ambiguous). Run
+`node solver/test-engine.js` to see all of this re-verified from
+scratch.
 
-## `MOVE` schema
+## Why a template instead of a live API-calling app
+
+There is still no backend and no runtime API calls — the solver is a
+**batch computation that runs once, offline**, producing a fixed list of
+steps that get baked into a static page (or a set of cards). The
+original plan was to have the tutor (Claude) work out each move live in
+conversation, one turn at a time — that turned out to be far too slow in
+practice (multiple minutes per turn, with real mistakes from doing the
+cube math by hand). Precomputing the whole solve keeps the "no live
+API" constraint while fixing the speed problem.
+
+## How a tutoring session works (once the solver is finished)
+
+1. **Capture the cube.** Read off all 6 faces (see the face-by-face
+   protocol that was used in the trial — center color, the color on top
+   of that face as held, then the 9 stickers). Cross-validate: every
+   color must appear exactly 9 times, and no corner may show two colors
+   from the same opposite pair.
+2. **Run the solver once** to get the full move list up front.
+3. **Generate the viewer** (`generate-viewer.js`) — one page, Next/Back
+   through every step, no more waiting on a live turn.
+4. **Two passes, one toggle.** Every step ships with the reasoning
+   hidden behind a "Why this move?" button, off by default — first pass
+   is just following arrows, second pass (or anytime) reveals why.
+
+## `CUBE_STATE` / `MOVE` schema
+
+Six faces, each a 3×3 grid, row-major, top-left to bottom-right, as seen
+looking directly at that face from outside the cube. Colors are single
+letters (swap the set to match whatever cube you're rendering).
 
 ```js
-const MOVE = { face: "R", direction: "CW" }; // or "CCW"
+const MOVE = { face: "R", direction: "CW", double: false }; // direction: "CW"|"CCW"
 ```
 
-`direction` is always "viewed from outside the cube, looking straight at
-that face" — exactly how the close-up diagram draws it, so there's no
-mental mirroring required.
+`direction` is "viewed from outside the cube, looking straight at that
+face" — exactly how the close-up diagram draws it. `double: true` means
+a 180° turn (direction is then irrelevant).
 
 ## Why the diagram is split into two SVGs
 
-The first version of this drew the rotation arrow directly on the full
-unfolded net, centered on the face being turned. It looked fine until
-the arrow's own stroke width overlapped the sticker letters underneath
-(an `R` sticker became misreadable as a `P` under the arrowhead) — the
-exact kind of ambiguity this project exists to avoid, so it was reworked. Now the full net (top)
-shows all six faces with the target face only outlined in pink — no
-arrow, so nothing is ever covered. A second, larger close-up (below)
-shows just that one face, big enough that the rotation arrow orbits
-entirely outside the stickers. Verified in both light and dark themes,
-and for both turn directions, by rendering with headless Chromium during
-development.
+An early version drew the rotation arrow directly on the full unfolded
+net, centered on the face being turned — until the arrow's stroke width
+overlapped a sticker letter (`R` became misreadable as `P`), which is
+exactly the kind of ambiguity this project exists to avoid. Now the full
+net shows all six faces with the target face only outlined — no arrow —
+and a separate, larger close-up shows just that face with the arrow
+orbiting entirely outside the stickers.
