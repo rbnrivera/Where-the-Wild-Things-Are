@@ -221,31 +221,33 @@
   // whatever cube you're rendering.
   // Net layout: U above F; L, F, R, B in a row; D below F.
   const CUBE_STATE = {
-    U: ["G","B","O", "Y","Y","K", "K","R","B"],
-    F: ["B","G","O", "B","G","B", "G","R","Y"],
-    L: ["K","O","R", "O","R","O", "Y","K","K"],
-    R: ["K","O","Y", "Y","O","R", "B","G","R"],
+    U: ["G","B","O", "Y","Y","K", "K","O","R"],
+    F: ["G","B","B", "R","G","G", "Y","B","O"],
+    L: ["K","O","O", "O","R","B", "Y","K","O"],
+    R: ["K","O","Y", "R","O","R", "B","G","R"],
     B: ["G","K","R", "Y","B","G", "Y","Y","B"],
-    D: ["O","B","O", "R","K","K", "R","G","G"]
+    D: ["B","Y","K", "R","K","K", "R","G","G"]
   };
 
   // The single move for this step. face: U/D/F/B/L/R.
   // direction: "CW" or "CCW", both meaning "viewed from outside,
   // looking straight at that face" — exactly how the diagram draws it.
-  const MOVE = { face: "F", direction: "CW" };
+  // double: true for a 180° turn (direction is irrelevant then, both
+  // ways land the same — set it anyway so an arrow still draws).
+  const MOVE = { face: "D", direction: "CW", double: true };
 
   const STEP = {
-    number: 1,
+    number: 2,
     total: null,
     phase: "Yellow Cross",
     orientation: "Hold it just like you have it now: Yellow on top, Green facing you",
-    instruction: "Turn the FRONT layer this way (clockwise)",
-    why: "Look at the yellow-and-blue piece sitting on the front-right edge, " +
-      "between the front and right faces. It's stuck on the side, not " +
-      "touching the top or the bottom. Turning the front layer this way " +
-      "slides that piece down to the bottom. Once it's on the bottom, " +
-      "there's an easy trick to pop it straight up into place, right next " +
-      "to the yellow center on top."
+    instruction: "Turn the BOTTOM layer halfway around, like a U-turn",
+    why: "That yellow-blue piece is now on the bottom, with yellow facing " +
+      "straight down and blue facing the front. Spinning the bottom layer " +
+      "halfway around walks it from the front edge to the back edge, " +
+      "without flipping it over — yellow keeps facing down the whole way. " +
+      "It needs to be at the back before the next move, which will flip " +
+      "it face-up right next to the blue center."
   };
 
   // =====================================================================
@@ -380,7 +382,9 @@
     document.getElementById("orientLine").textContent = STEP.orientation;
     document.getElementById("instructionLine").textContent = STEP.instruction;
     const faceNames = { U: "TOP", D: "BOTTOM", F: "FRONT", B: "BACK", L: "LEFT", R: "RIGHT" };
-    const dirWord = MOVE.direction === "CW" ? "clockwise" : "counter-clockwise";
+    const dirWord = MOVE.double
+      ? "halfway around (180°) — either direction lands the same"
+      : MOVE.direction === "CW" ? "clockwise" : "counter-clockwise";
     document.getElementById("stage").innerHTML = `
       ${buildNetSVG(CUBE_STATE, MOVE)}
       <div class="focus-wrap">
