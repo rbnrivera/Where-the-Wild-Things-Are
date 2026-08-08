@@ -216,14 +216,16 @@
 
   // Cube state: each face is a 3x3 grid, row-major, top-left to
   // bottom-right, AS SEEN LOOKING DIRECTLY AT THAT FACE FROM OUTSIDE
-  // THE CUBE. Colors: W Y R O G B (white/yellow/red/orange/green/blue).
+  // THE CUBE. Colors: O G R B Y K (orange/green/red/blue/yellow/black) —
+  // this deck's color set has no white, swap COLORS below to match
+  // whatever cube you're rendering.
   // Net layout: U above F; L, F, R, B in a row; D below F.
   const CUBE_STATE = {
-    U: ["W","W","R", "W","W","G", "O","O","W"],
+    U: ["K","K","R", "K","K","G", "O","O","K"],
     L: ["G","G","G", "O","O","O", "B","B","B"],
-    F: ["W","W","O", "R","R","R", "Y","Y","G"],
+    F: ["K","K","O", "R","R","R", "Y","Y","G"],
     R: ["B","B","O", "G","G","G", "Y","R","R"],
-    B: ["Y","O","O", "B","B","B", "W","Y","Y"],
+    B: ["Y","O","O", "B","B","B", "K","Y","Y"],
     D: ["Y","Y","Y", "R","O","O", "G","Y","B"]
   };
 
@@ -235,13 +237,13 @@
   const STEP = {
     number: 4,
     total: 21,
-    phase: "🌸 Step 1: White Cross",
-    orientation: "Hold it: White on top, Green facing you",
+    phase: "🌑 Step 1: Black Cross",
+    orientation: "Hold it: Black on top, Green facing you",
     instruction: "Turn the RIGHT layer this way →",
     why: "See the red-and-green edge piece sitting in the bottom layer, " +
       "under the spot where it needs to go? Turning the right layer this " +
       "way lifts it up next to the yellow center without messing up the " +
-      "white edges we already placed. Any other turn would knock a " +
+      "black edges we already placed. Any other turn would knock a " +
       "finished piece out of place."
   };
 
@@ -250,7 +252,7 @@
   // =====================================================================
 
   const COLORS = {
-    W: { fill: "#ffffff", text: "#1b1b1f", name: "White" },
+    K: { fill: "#1b1b1f", text: "#ffffff", name: "Black" },
     Y: { fill: "#ffd400", text: "#1b1b1f", name: "Yellow" },
     R: { fill: "#d7263d", text: "#ffffff", name: "Red" },
     O: { fill: "#ff8a00", text: "#1b1b1f", name: "Orange" },
