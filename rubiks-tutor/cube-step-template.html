@@ -222,11 +222,11 @@
   // Net layout: U above F; L, F, R, B in a row; D below F.
   const CUBE_STATE = {
     U: ["G","B","O", "Y","Y","K", "K","O","R"],
-    F: ["G","B","B", "R","G","G", "Y","B","O"],
-    L: ["K","O","O", "O","R","B", "Y","K","O"],
-    R: ["K","O","Y", "R","O","R", "B","G","R"],
-    B: ["G","K","R", "Y","B","G", "Y","Y","B"],
-    D: ["B","Y","K", "R","K","K", "R","G","G"]
+    F: ["G","B","B", "R","G","G", "Y","Y","B"],
+    L: ["K","O","O", "O","R","B", "B","G","R"],
+    R: ["K","O","Y", "R","O","R", "Y","K","O"],
+    B: ["G","K","R", "Y","B","G", "Y","B","O"],
+    D: ["G","G","R", "K","K","R", "K","Y","B"]
   };
 
   // The single move for this step. face: U/D/F/B/L/R.
@@ -234,20 +234,19 @@
   // looking straight at that face" — exactly how the diagram draws it.
   // double: true for a 180° turn (direction is irrelevant then, both
   // ways land the same — set it anyway so an arrow still draws).
-  const MOVE = { face: "D", direction: "CW", double: true };
+  const MOVE = { face: "B", direction: "CW", double: true };
 
   const STEP = {
-    number: 2,
+    number: 3,
     total: null,
     phase: "Yellow Cross",
     orientation: "Hold it just like you have it now: Yellow on top, Green facing you",
-    instruction: "Turn the BOTTOM layer halfway around, like a U-turn",
-    why: "That yellow-blue piece is now on the bottom, with yellow facing " +
-      "straight down and blue facing the front. Spinning the bottom layer " +
-      "halfway around walks it from the front edge to the back edge, " +
-      "without flipping it over — yellow keeps facing down the whole way. " +
-      "It needs to be at the back before the next move, which will flip " +
-      "it face-up right next to the blue center."
+    instruction: "Turn the BACK layer halfway around, like a U-turn",
+    why: "The yellow-blue piece is now on the back-bottom edge, yellow " +
+      "facing straight down and blue facing the back. Spinning the back " +
+      "layer halfway around flips that whole edge up and over, so yellow " +
+      "ends up facing up — right in the top-back slot, next to the blue " +
+      "center. That's our first cross piece placed!"
   };
 
   // =====================================================================
