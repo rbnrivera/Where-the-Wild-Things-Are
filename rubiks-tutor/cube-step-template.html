@@ -1,0 +1,407 @@
+<title>Cube Tutor — Step Card</title>
+
+<!--
+  RUBIK'S CUBE TUTOR — ONE-STEP CARD
+  ===================================
+  This file is a TEMPLATE, not an app. It has no solver, no API calls,
+  and nothing runs on its own. The tutor (a person, in conversation)
+  fills in the CONFIG block below with the cube's current state and the
+  single next move, then republishes this file as a one-off picture.
+  The only job this code does is: given a state + one move, draw the
+  exact same picture every single time. That guarantee — not cleverness
+  — is the whole point.
+
+  See ../README.md for the state schema and the turn-by-turn workflow.
+-->
+
+<style>
+  :root {
+    --ink: #21242b;
+    --ink-soft: #565b66;
+    --paper: #e9edf1;
+    --surface: #ffffff;
+    --surface-line: #d7dce2;
+    --accent: #e8367a;
+    --accent-ink: #ffffff;
+    --focus: #1a6fd1;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #edeef0;
+      --ink-soft: #a7acb6;
+      --paper: #14161a;
+      --surface: #1d2024;
+      --surface-line: #2c3036;
+      --accent: #ff5c93;
+      --accent-ink: #1a0410;
+      --focus: #6fb0ff;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink: #edeef0;
+    --ink-soft: #a7acb6;
+    --paper: #14161a;
+    --surface: #1d2024;
+    --surface-line: #2c3036;
+    --accent: #ff5c93;
+    --accent-ink: #1a0410;
+    --focus: #6fb0ff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 28px 16px 48px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 460px;
+    background: var(--surface);
+    border: 1px solid var(--surface-line);
+    border-radius: 20px;
+    padding: 22px 22px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .statusbar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .statusbar .phase { color: var(--accent); font-weight: 700; }
+
+  .instruction {
+    margin: 0;
+    font-size: clamp(24px, 6vw, 30px);
+    line-height: 1.15;
+    font-weight: 800;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    background: var(--paper);
+    border: 1px solid var(--surface-line);
+    border-radius: 14px;
+    padding: 16px 6px;
+  }
+
+  .stage svg { width: 100%; height: auto; }
+  .net-svg { max-width: 420px; }
+  .focus-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .focus-svg { max-width: 200px; }
+  .focus-label {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .why-toggle {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 15px;
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+
+  .why-toggle:focus-visible,
+  .cube-step-restart:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .why-toggle[aria-expanded="true"] {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  .why-panel {
+    margin: 0;
+    padding: 14px 16px;
+    background: var(--paper);
+    border-left: 4px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--ink);
+    max-width: 62ch;
+  }
+
+  .why-panel[hidden] { display: none; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding-top: 4px;
+    border-top: 1px solid var(--surface-line);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .legend .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .legend .swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    display: inline-block;
+    border: 1px solid var(--surface-line);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .why-panel { animation: reveal 180ms ease-out; }
+  }
+  @keyframes reveal {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+
+<div class="card">
+  <div class="statusbar">
+    <span class="phase" id="phaseLine"></span>
+    <span id="orientLine"></span>
+  </div>
+  <h1 class="instruction" id="instructionLine"></h1>
+  <div class="stage" id="stage"></div>
+  <button class="why-toggle" id="whyToggle" aria-expanded="false" aria-controls="whyPanel">
+    <span aria-hidden="true">🤔</span> Why this move?
+  </button>
+  <p class="why-panel" id="whyPanel" hidden></p>
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+  // =====================================================================
+  // CONFIG — the tutor edits ONLY this block, once per step, then
+  // republishes the file. Nothing else in this file should change
+  // between steps.
+  // =====================================================================
+
+  // Cube state: each face is a 3x3 grid, row-major, top-left to
+  // bottom-right, AS SEEN LOOKING DIRECTLY AT THAT FACE FROM OUTSIDE
+  // THE CUBE. Colors: W Y R O G B (white/yellow/red/orange/green/blue).
+  // Net layout: U above F; L, F, R, B in a row; D below F.
+  const CUBE_STATE = {
+    U: ["W","W","R", "W","W","G", "O","O","W"],
+    L: ["G","G","G", "O","O","O", "B","B","B"],
+    F: ["W","W","O", "R","R","R", "Y","Y","G"],
+    R: ["B","B","O", "G","G","G", "Y","R","R"],
+    B: ["Y","O","O", "B","B","B", "W","Y","Y"],
+    D: ["Y","Y","Y", "R","O","O", "G","Y","B"]
+  };
+
+  // The single move for this step. face: U/D/F/B/L/R.
+  // direction: "CW" or "CCW", both meaning "viewed from outside,
+  // looking straight at that face" — exactly how the diagram draws it.
+  const MOVE = { face: "R", direction: "CW" };
+
+  const STEP = {
+    number: 4,
+    total: 21,
+    phase: "🌸 Step 1: White Cross",
+    orientation: "Hold it: White on top, Green facing you",
+    instruction: "Turn the RIGHT layer this way →",
+    why: "See the red-and-green edge piece sitting in the bottom layer, " +
+      "under the spot where it needs to go? Turning the right layer this " +
+      "way lifts it up next to the yellow center without messing up the " +
+      "white edges we already placed. Any other turn would knock a " +
+      "finished piece out of place."
+  };
+
+  // =====================================================================
+  // RENDERER — do not edit below this line.
+  // =====================================================================
+
+  const COLORS = {
+    W: { fill: "#ffffff", text: "#1b1b1f", name: "White" },
+    Y: { fill: "#ffd400", text: "#1b1b1f", name: "Yellow" },
+    R: { fill: "#d7263d", text: "#ffffff", name: "Red" },
+    O: { fill: "#ff8a00", text: "#1b1b1f", name: "Orange" },
+    G: { fill: "#009e60", text: "#ffffff", name: "Green" },
+    B: { fill: "#0056d6", text: "#ffffff", name: "Blue" }
+  };
+
+  const BLOCKS = {
+    U: [1, 0], L: [0, 1], F: [1, 1], R: [2, 1], B: [3, 1], D: [1, 2]
+  };
+
+  const UNIT = 34;
+  const GUTTER = 10;
+  const STEP_PX = UNIT * 3 + GUTTER;
+
+  function blockOrigin(face) {
+    const [cb, rb] = BLOCKS[face];
+    return [cb * STEP_PX, rb * STEP_PX];
+  }
+
+  function arcPoint(cx, cy, r, deg) {
+    const t = (deg * Math.PI) / 180;
+    return [cx + r * Math.sin(t), cy - r * Math.cos(t)];
+  }
+
+  function arrowPath(cx, cy, r, clockwise) {
+    const [a0, a1] = clockwise ? [20, 320] : [340, 40];
+    const sweep = clockwise ? 1 : 0;
+    const p0 = arcPoint(cx, cy, r, a0);
+    const p1 = arcPoint(cx, cy, r, a1);
+    return `M ${p0[0].toFixed(1)} ${p0[1].toFixed(1)} A ${r} ${r} 0 1 ${sweep} ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`;
+  }
+
+  function stickerCells(grid, unit, x0, y0) {
+    const parts = [];
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        const code = grid[i * 3 + j];
+        const c = COLORS[code];
+        const x = x0 + j * unit;
+        const y = y0 + i * unit;
+        const pad = unit >= 44 ? 3 : 2;
+        parts.push(
+          `<rect x="${x + pad}" y="${y + pad}" width="${unit - pad * 2}" height="${unit - pad * 2}" rx="${unit >= 44 ? 6 : 4}" fill="${c.fill}" stroke="var(--ink)" stroke-width="1.5"></rect>`
+        );
+        parts.push(
+          `<text x="${x + unit / 2}" y="${y + unit / 2 + unit * 0.12}" text-anchor="middle" font-size="${unit >= 44 ? 18 : 12}" font-weight="700" font-family="ui-monospace, monospace" fill="${c.text}">${code}</text>`
+        );
+      }
+    }
+    return parts.join("");
+  }
+
+  // Full net: shows every face at once, with the face to turn outlined.
+  // Deliberately carries NO arrow — the net is too crowded for one to sit
+  // near a face without covering a neighboring face's stickers.
+  function buildNetSVG(state, move) {
+    const width = 4 * STEP_PX - GUTTER;
+    const height = 3 * STEP_PX - GUTTER;
+    const parts = [];
+    parts.push(
+      `<svg class="net-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All six faces of the cube, unfolded flat">`
+    );
+
+    for (const face of Object.keys(BLOCKS)) {
+      const [x0, y0] = blockOrigin(face);
+      parts.push(stickerCells(state[face], UNIT, x0, y0));
+    }
+
+    if (move && move.face) {
+      const [x0, y0] = blockOrigin(move.face);
+      const size = UNIT * 3;
+      parts.push(
+        `<rect x="${x0 - 4}" y="${y0 - 4}" width="${size + 8}" height="${size + 8}" rx="10" fill="none" stroke="var(--accent)" stroke-width="5"></rect>`
+      );
+    }
+
+    parts.push("</svg>");
+    return parts.join("");
+  }
+
+  // Focus close-up: just the one face being turned, drawn big, with the
+  // rotation arrow orbiting fully outside the stickers so nothing is ever
+  // covered or made ambiguous.
+  function buildFocusSVG(state, move) {
+    const unit = 54;
+    const size = unit * 3;
+    const pad = 44;
+    const canvas = size + pad * 2;
+    const x0 = pad;
+    const y0 = pad;
+    const parts = [];
+    parts.push(
+      `<svg class="focus-svg" viewBox="0 0 ${canvas} ${canvas}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Close-up of the face to turn, with an arrow showing which way">`
+    );
+    parts.push(`
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="var(--accent)"></path>
+        </marker>
+      </defs>
+    `);
+    parts.push(
+      `<rect x="${x0 - 5}" y="${y0 - 5}" width="${size + 10}" height="${size + 10}" rx="12" fill="none" stroke="var(--accent)" stroke-width="4"></rect>`
+    );
+    parts.push(stickerCells(state[move.face], unit, x0, y0));
+
+    const cx = canvas / 2;
+    const cy = canvas / 2;
+    const r = size / 2 + 26;
+    const d = arrowPath(cx, cy, r, move.direction === "CW");
+    parts.push(
+      `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"></path>`
+    );
+
+    parts.push("</svg>");
+    return parts.join("");
+  }
+
+  function render() {
+    document.getElementById("phaseLine").textContent =
+      `${STEP.phase} · Step ${STEP.number} of ${STEP.total}`;
+    document.getElementById("orientLine").textContent = STEP.orientation;
+    document.getElementById("instructionLine").textContent = STEP.instruction;
+    const faceNames = { U: "TOP", D: "BOTTOM", F: "FRONT", B: "BACK", L: "LEFT", R: "RIGHT" };
+    const dirWord = MOVE.direction === "CW" ? "clockwise" : "counter-clockwise";
+    document.getElementById("stage").innerHTML = `
+      ${buildNetSVG(CUBE_STATE, MOVE)}
+      <div class="focus-wrap">
+        <span class="focus-label">${faceNames[MOVE.face]} face, up close · turn ${dirWord}</span>
+        ${buildFocusSVG(CUBE_STATE, MOVE)}
+      </div>
+    `;
+    document.getElementById("whyPanel").textContent = STEP.why;
+
+    const legend = document.getElementById("legend");
+    legend.innerHTML = Object.entries(COLORS)
+      .map(
+        ([code, c]) =>
+          `<span class="chip"><span class="swatch" style="background:${c.fill}"></span>${code} = ${c.name}</span>`
+      )
+      .join("");
+
+    const toggle = document.getElementById("whyToggle");
+    const panel = document.getElementById("whyPanel");
+    toggle.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      panel.hidden = open;
+    });
+  }
+
+  render();
+</script>
