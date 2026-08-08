@@ -221,12 +221,12 @@
   // whatever cube you're rendering.
   // Net layout: U above F; L, F, R, B in a row; D below F.
   const CUBE_STATE = {
-    U: ["G","B","O", "Y","Y","K", "K","O","R"],
+    U: ["B","Y","K", "Y","Y","K", "K","O","R"],
     F: ["G","B","B", "R","G","G", "Y","Y","B"],
-    L: ["K","O","O", "O","R","B", "B","G","R"],
-    R: ["K","O","Y", "R","O","R", "Y","K","O"],
-    B: ["G","K","R", "Y","B","G", "Y","B","O"],
-    D: ["G","G","R", "K","K","R", "K","Y","B"]
+    L: ["O","O","O", "R","R","B", "Y","G","R"],
+    R: ["K","O","B", "R","O","O", "Y","K","K"],
+    B: ["O","B","Y", "G","B","Y", "R","K","G"],
+    D: ["G","G","R", "K","K","R", "O","B","G"]
   };
 
   // The single move for this step. face: U/D/F/B/L/R.
@@ -234,19 +234,20 @@
   // looking straight at that face" — exactly how the diagram draws it.
   // double: true for a 180° turn (direction is irrelevant then, both
   // ways land the same — set it anyway so an arrow still draws).
-  const MOVE = { face: "B", direction: "CW", double: true };
+  const MOVE = { face: "L", direction: "CW" };
 
   const STEP = {
-    number: 3,
+    number: 4,
     total: null,
     phase: "Yellow Cross",
     orientation: "Hold it just like you have it now: Yellow on top, Green facing you",
-    instruction: "Turn the BACK layer halfway around, like a U-turn",
-    why: "The yellow-blue piece is now on the back-bottom edge, yellow " +
-      "facing straight down and blue facing the back. Spinning the back " +
-      "layer halfway around flips that whole edge up and over, so yellow " +
-      "ends up facing up — right in the top-back slot, next to the blue " +
-      "center. That's our first cross piece placed!"
+    instruction: "Turn the LEFT layer this way (clockwise)",
+    why: "See the yellow-and-orange piece on top, along the left edge? " +
+      "It's already showing yellow up, but it's in the wrong slot — it " +
+      "actually belongs next to the orange center, not here. Turning the " +
+      "left layer this way sends it toward the back without disturbing " +
+      "the yellow-blue piece we just placed (it isn't part of the left " +
+      "layer at all)."
   };
 
   // =====================================================================
