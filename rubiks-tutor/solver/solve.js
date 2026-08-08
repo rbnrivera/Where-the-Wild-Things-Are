@@ -18,7 +18,11 @@ function flatIdx(face, idx) { return FACES.indexOf(face) * 9 + idx; }
 // heuristic, since "disturb temporarily, restore by the end" is exactly
 // how real cube algorithms work and a heuristic that penalizes every
 // intermediate disturbance makes IDA* pathologically slow to find them.
-function idaSearch(startFlat, goalConstraints, mustAlsoHold, maxBound) {
+const OPPOSITE = { U: 'D', D: 'U', F: 'B', B: 'F', L: 'R', R: 'L' };
+const AXIS_ORDER = { U: 0, D: 0, F: 1, B: 1, L: 2, R: 2 };
+const CANONICAL_FIRST = { U: true, F: true, L: true }; // within an axis pair, this one must come first
+
+function idaSearch(startFlat, goalConstraints, mustAlsoHold, maxBound, timeBudgetMs) {
   const wrongCount = (flat, cons) => {
     let n = 0;
     for (const [i, c] of cons) if (flat[i] !== c) n++;
@@ -28,23 +32,40 @@ function idaSearch(startFlat, goalConstraints, mustAlsoHold, maxBound) {
   const fullyDone = (flat) => goalMet(flat) && (!mustAlsoHold || wrongCount(flat, mustAlsoHold) === 0);
   const h = (flat) => Math.ceil(wrongCount(flat, goalConstraints) / 2);
   if (fullyDone(startFlat)) return [];
+  const deadline = timeBudgetMs ? Date.now() + timeBudgetMs : Infinity;
 
   for (let bound = Math.max(1, h(startFlat)); bound <= maxBound; bound++) {
-    function dfs(flat, g, lastFace, path) {
+    const seenAtDepth = new Map(); // flat-key -> best g seen this bound-iteration
+    function dfs(flat, g, lastFace, prevFace, path) {
+      if (Date.now() > deadline) throw { timedOut: true };
       const f = g + h(flat);
       if (f > bound) return null;
       if (g === bound) return fullyDone(flat) ? path : null;
+      const k = flat.join('');
+      const seen = seenAtDepth.get(k);
+      if (seen !== undefined && seen <= g) return null;
+      seenAtDepth.set(k, g);
       for (const m of MOVES) {
         if (m.face === lastFace) continue;
+        // skip out-of-canonical-order same-axis pairs (they commute, so
+        // only explore one ordering) — halves branching for opposite faces.
+        if (lastFace && AXIS_ORDER[m.face] === AXIS_ORDER[lastFace] && m.face !== lastFace) {
+          if (!CANONICAL_FIRST[lastFace]) continue;
+        }
         const nf = applyMoveFlat(flat, m.face, m.dir, m.double);
         if (fullyDone(nf)) return path.concat([m]);
-        const r = dfs(nf, g + 1, m.face, path.concat([m]));
+        const r = dfs(nf, g + 1, m.face, lastFace, path.concat([m]));
         if (r) return r;
       }
       return null;
     }
-    const res = dfs(startFlat, 0, null, []);
-    if (res) return res;
+    try {
+      const res = dfs(startFlat, 0, null, null, []);
+      if (res) return res;
+    } catch (e) {
+      if (e && e.timedOut) return null;
+      throw e;
+    }
   }
   return null;
 }
@@ -76,10 +97,10 @@ function solve(initialState, log) {
   const allMoves = [];
   const lockedConstraints = []; // grows as pieces get placed; always preserved
 
-  function run(label, newConstraints, maxBound) {
+  function run(label, newConstraints, maxBound, timeBudgetMs) {
     const t0 = Date.now();
-    const moves = idaSearch(flat, newConstraints, lockedConstraints, maxBound);
-    if (!moves) throw new Error(`${label}: no solution within bound ${maxBound}`);
+    const moves = idaSearch(flat, newConstraints, lockedConstraints, maxBound, timeBudgetMs);
+    if (!moves) throw new Error(`${label}: no solution within bound ${maxBound} / ${timeBudgetMs}ms`);
     for (const m of moves) flat = applyMoveFlat(flat, m.face, m.dir, m.double);
     allMoves.push(...moves.map((m) => ({ ...m, label })));
     log && log(`${label}: ${moves.map(mvStr).join(' ') || '(already there)'}  [${Date.now() - t0}ms]`);
@@ -89,19 +110,19 @@ function solve(initialState, log) {
   for (const e of CROSS_EDGES) {
     run(`cross-${e.side}`, [
       [flatIdx('U', e.uIdx), C.U], [flatIdx(e.side, e.sIdx), C[e.side]],
-    ], 10);
+    ], 10, 15000);
   }
   for (const c of FIRST_LAYER_CORNERS) {
     const [fa, fb] = c.faces;
     run(`corner-${c.faces.join('')}`, [
       [flatIdx('U', c.uIdx), C.U], [flatIdx(fa, c.aIdx), C[fa]], [flatIdx(fb, c.bIdx), C[fb]],
-    ], 10);
+    ], 10, 15000);
   }
   for (const e of SECOND_LAYER_EDGES) {
     const [fa, fb] = e.faces;
     run(`edge2-${e.faces.join('')}`, [
       [flatIdx(fa, e.aIdx), C[fa]], [flatIdx(fb, e.bIdx), C[fb]],
-    ], 10);
+    ], 10, 15000);
   }
 
   // Last layer, staged (classic orient-edges / orient-corners /
@@ -113,14 +134,14 @@ function solve(initialState, log) {
     ['D', 0, 'F', 6, 'L', 8], ['D', 2, 'F', 8, 'R', 6],
     ['D', 6, 'B', 8, 'L', 6], ['D', 8, 'B', 6, 'R', 8],
   ];
-  run('LL-orient-edges', DL_EDGES.map(([f, i]) => [flatIdx(f, i), C[f]]), 12);
-  run('LL-orient-corners', DL_CORNERS.map(([f, i]) => [flatIdx(f, i), C[f]]), 12);
+  run('LL-orient-edges', DL_EDGES.map(([f, i]) => [flatIdx(f, i), C[f]]), 14, 20000);
+  run('LL-orient-corners', DL_CORNERS.map(([f, i]) => [flatIdx(f, i), C[f]]), 14, 20000);
   run('LL-permute-corners', DL_CORNERS.flatMap(([f1, i1, f2, i2, f3, i3]) => [
     [flatIdx(f1, i1), C[f1]], [flatIdx(f2, i2), C[f2]], [flatIdx(f3, i3), C[f3]],
-  ]), 14);
+  ]), 16, 30000);
   const lastLayerConstraints = [];
   for (const f of FACES) for (let i = 0; i < 9; i++) lastLayerConstraints.push([flatIdx(f, i), C[f]]);
-  run('LL-permute-edges', lastLayerConstraints, 14);
+  run('LL-permute-edges', lastLayerConstraints, 16, 30000);
 
   return { state: fromFlat(flat), moves: allMoves };
 }
