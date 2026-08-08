@@ -221,12 +221,12 @@
   // whatever cube you're rendering.
   // Net layout: U above F; L, F, R, B in a row; D below F.
   const CUBE_STATE = {
-    U: ["B","Y","K", "Y","Y","K", "K","O","R"],
-    F: ["G","B","B", "R","G","G", "Y","Y","B"],
-    L: ["O","O","O", "R","R","B", "Y","G","R"],
+    U: ["G","Y","K", "R","Y","K", "Y","O","R"],
+    F: ["G","B","B", "K","G","G", "O","Y","B"],
+    L: ["O","B","R", "O","R","G", "O","R","Y"],
     R: ["K","O","B", "R","O","O", "Y","K","K"],
-    B: ["O","B","Y", "G","B","Y", "R","K","G"],
-    D: ["G","G","R", "K","K","R", "O","B","G"]
+    B: ["O","B","K", "G","B","Y", "R","K","B"],
+    D: ["G","G","R", "Y","K","R", "Y","B","G"]
   };
 
   // The single move for this step. face: U/D/F/B/L/R.
@@ -234,20 +234,19 @@
   // looking straight at that face" — exactly how the diagram draws it.
   // double: true for a 180° turn (direction is irrelevant then, both
   // ways land the same — set it anyway so an arrow still draws).
-  const MOVE = { face: "L", direction: "CW" };
+  const MOVE = { face: "F", direction: "CW" };
 
   const STEP = {
-    number: 4,
+    number: 5,
     total: null,
     phase: "Yellow Cross",
     orientation: "Hold it just like you have it now: Yellow on top, Green facing you",
-    instruction: "Turn the LEFT layer this way (clockwise)",
-    why: "See the yellow-and-orange piece on top, along the left edge? " +
-      "It's already showing yellow up, but it's in the wrong slot — it " +
-      "actually belongs next to the orange center, not here. Turning the " +
-      "left layer this way sends it toward the back without disturbing " +
-      "the yellow-blue piece we just placed (it isn't part of the left " +
-      "layer at all)."
+    instruction: "Turn the FRONT layer this way (clockwise)",
+    why: "There's a yellow-and-green piece on the bottom layer right now, " +
+      "showing yellow on the front face and green facing down. It needs " +
+      "a couple of moves to get into place cleanly. This first one slides " +
+      "it out of the front-bottom spot toward the left side, without " +
+      "touching either piece we've already placed."
   };
 
   // =====================================================================
