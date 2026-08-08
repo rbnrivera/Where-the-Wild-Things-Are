@@ -1,5 +1,5 @@
 'use strict';
-const { applyMove, FACES } = require('./engine');
+const { applyMoveFlat, toFlat, fromFlat, FACES } = require('./engine');
 
 const MOVES = [];
 for (const face of FACES) {
@@ -8,47 +8,49 @@ for (const face of FACES) {
   MOVES.push({ face, dir: 'CW', double: true });
 }
 function mvStr(m) { return m.face + (m.double ? '2' : m.dir === 'CCW' ? "'" : ''); }
-function key(state) { return FACES.map((f) => state[f].join('')).join('|'); }
+function flatIdx(face, idx) { return FACES.indexOf(face) * 9 + idx; }
 
-// Note: `preserve` is only checked at the SUCCESS condition, not used to
-// prune intermediate states — a valid short solution may legitimately
-// pass through states that temporarily "disturb" already-placed pieces
-// (classic commutator-style moves) before restoring them by the end.
-function bfs(start, goal, preserve, maxDepth) {
-  const success = (s) => goal(s) && (!preserve || preserve(s));
-  if (success(start)) return { state: start, moves: [] };
-  let frontier = [{ state: start, moves: [] }];
-  const seen = new Set([key(start)]);
-  for (let depth = 1; depth <= maxDepth; depth++) {
-    const next = [];
-    for (const node of frontier) {
+// Unified IDA* search over flat 54-arrays. `goalConstraints` drives the
+// heuristic (kept small/tight on purpose — e.g. just the 4 facelets for
+// "last-layer edges oriented" — so it prunes hard toward that subgoal);
+// `mustAlsoHold` (typically the much larger "don't disturb what's
+// already solved" set) gates final acceptance but is NOT part of the
+// heuristic, since "disturb temporarily, restore by the end" is exactly
+// how real cube algorithms work and a heuristic that penalizes every
+// intermediate disturbance makes IDA* pathologically slow to find them.
+function idaSearch(startFlat, goalConstraints, mustAlsoHold, maxBound) {
+  const wrongCount = (flat, cons) => {
+    let n = 0;
+    for (const [i, c] of cons) if (flat[i] !== c) n++;
+    return n;
+  };
+  const goalMet = (flat) => wrongCount(flat, goalConstraints) === 0;
+  const fullyDone = (flat) => goalMet(flat) && (!mustAlsoHold || wrongCount(flat, mustAlsoHold) === 0);
+  const h = (flat) => Math.ceil(wrongCount(flat, goalConstraints) / 2);
+  if (fullyDone(startFlat)) return [];
+
+  for (let bound = Math.max(1, h(startFlat)); bound <= maxBound; bound++) {
+    function dfs(flat, g, lastFace, path) {
+      const f = g + h(flat);
+      if (f > bound) return null;
+      if (g === bound) return fullyDone(flat) ? path : null;
       for (const m of MOVES) {
-        const ns = applyMove(node.state, m.face, m.dir, m.double);
-        const k = key(ns);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        const nmoves = node.moves.concat([m]);
-        if (success(ns)) return { state: ns, moves: nmoves };
-        next.push({ state: ns, moves: nmoves });
+        if (m.face === lastFace) continue;
+        const nf = applyMoveFlat(flat, m.face, m.dir, m.double);
+        if (fullyDone(nf)) return path.concat([m]);
+        const r = dfs(nf, g + 1, m.face, path.concat([m]));
+        if (r) return r;
       }
+      return null;
     }
-    frontier = next;
-    if (frontier.length === 0) return null;
+    const res = dfs(startFlat, 0, null, []);
+    if (res) return res;
   }
   return null;
 }
 
 function centerColors(state) {
   return { U: state.U[4], D: state.D[4], F: state.F[4], B: state.B[4], L: state.L[4], R: state.R[4] };
-}
-
-// Checks reusable across phases: "is this specific edge/corner slot
-// showing its solved colors right now?"
-function edgeCheck(topFace, topIdx, sideFace, sideIdx, C) {
-  return (s) => s[topFace][topIdx] === C[topFace] && s[sideFace][sideIdx] === C[sideFace];
-}
-function cornerCheck(f1, i1, f2, i2, f3, i3, C) {
-  return (s) => s[f1][i1] === C[f1] && s[f2][i2] === C[f2] && s[f3][i3] === C[f3];
 }
 
 const CROSS_EDGES = [
@@ -61,7 +63,6 @@ const FIRST_LAYER_CORNERS = [
   { faces: ['B', 'L'], uIdx: 0, aIdx: 2, bIdx: 0 },
   { faces: ['L', 'F'], uIdx: 6, aIdx: 2, bIdx: 0 },
 ];
-// Second layer edges, between F/R/B/L pairs (middle row of each side face).
 const SECOND_LAYER_EDGES = [
   { faces: ['F', 'R'], aIdx: 5, bIdx: 3 },
   { faces: ['R', 'B'], aIdx: 5, bIdx: 3 },
@@ -71,57 +72,57 @@ const SECOND_LAYER_EDGES = [
 
 function solve(initialState, log) {
   const C = centerColors(initialState);
-  let cur = initialState;
+  let flat = toFlat(initialState);
   const allMoves = [];
-  const record = (label, res) => {
-    cur = res.state;
-    allMoves.push(...res.moves.map((m) => ({ ...m, label })));
-    log && log(`${label}: ${res.moves.map(mvStr).join(' ') || '(already there)'}`);
-  };
+  const lockedConstraints = []; // grows as pieces get placed; always preserved
 
-  // Phase 1: cross
-  const placedCrossChecks = [];
-  for (const e of CROSS_EDGES) {
-    const check = edgeCheck('U', e.uIdx, e.side, e.sIdx, C);
-    const preserve = (s) => placedCrossChecks.every((c) => c(s));
-    const res = bfs(cur, check, preserve, 8);
-    if (!res) throw new Error('cross failed for ' + e.side);
-    record(`cross-${e.side}`, res);
-    placedCrossChecks.push(check);
+  function run(label, newConstraints, maxBound) {
+    const t0 = Date.now();
+    const moves = idaSearch(flat, newConstraints, lockedConstraints, maxBound);
+    if (!moves) throw new Error(`${label}: no solution within bound ${maxBound}`);
+    for (const m of moves) flat = applyMoveFlat(flat, m.face, m.dir, m.double);
+    allMoves.push(...moves.map((m) => ({ ...m, label })));
+    log && log(`${label}: ${moves.map(mvStr).join(' ') || '(already there)'}  [${Date.now() - t0}ms]`);
+    lockedConstraints.push(...newConstraints);
   }
 
-  // Phase 2: first layer corners
-  const placedCornerChecks = [];
+  for (const e of CROSS_EDGES) {
+    run(`cross-${e.side}`, [
+      [flatIdx('U', e.uIdx), C.U], [flatIdx(e.side, e.sIdx), C[e.side]],
+    ], 10);
+  }
   for (const c of FIRST_LAYER_CORNERS) {
     const [fa, fb] = c.faces;
-    const check = cornerCheck('U', c.uIdx, fa, c.aIdx, fb, c.bIdx, C);
-    const preserve = (s) => placedCrossChecks.every((pc) => pc(s)) && placedCornerChecks.every((pc) => pc(s));
-    const res = bfs(cur, check, preserve, 6);
-    if (!res) throw new Error('corner failed for ' + c.faces.join(''));
-    record(`corner-${c.faces.join('')}`, res);
-    placedCornerChecks.push(check);
+    run(`corner-${c.faces.join('')}`, [
+      [flatIdx('U', c.uIdx), C.U], [flatIdx(fa, c.aIdx), C[fa]], [flatIdx(fb, c.bIdx), C[fb]],
+    ], 10);
   }
-
-  // Phase 3: second layer edges
-  const placedSLEChecks = [];
   for (const e of SECOND_LAYER_EDGES) {
     const [fa, fb] = e.faces;
-    const check = edgeCheck(fa, e.aIdx, fb, e.bIdx, C);
-    const preserve = (s) => placedCrossChecks.every((pc) => pc(s)) && placedCornerChecks.every((pc) => pc(s)) && placedSLEChecks.every((pc) => pc(s));
-    const res = bfs(cur, check, preserve, 8);
-    if (!res) throw new Error('2nd layer edge failed for ' + e.faces.join(''));
-    record(`edge2-${e.faces.join('')}`, res);
-    placedSLEChecks.push(check);
+    run(`edge2-${e.faces.join('')}`, [
+      [flatIdx(fa, e.aIdx), C[fa]], [flatIdx(fb, e.bIdx), C[fb]],
+    ], 10);
   }
 
-  // Phase 4: last layer — full search to fully solved (no preserve needed,
-  // since the goal itself requires F2L to remain/return to solved).
-  const solved = (s) => FACES.every((f) => s[f].every((v) => v === C[f]));
-  const res = bfs(cur, solved, null, 7);
-  if (!res) throw new Error('last layer search exceeded depth cap');
-  record('last-layer', res);
+  // Last layer, staged (classic orient-edges / orient-corners /
+  // permute-corners / permute-edges breakdown) — each stage's goal is
+  // small, which keeps the search fast; a single flat "solve everything"
+  // search is combinatorially much harder.
+  const DL_EDGES = [['D', 1, 'F', 7], ['D', 3, 'L', 7], ['D', 5, 'R', 7], ['D', 7, 'B', 7]];
+  const DL_CORNERS = [
+    ['D', 0, 'F', 6, 'L', 8], ['D', 2, 'F', 8, 'R', 6],
+    ['D', 6, 'B', 8, 'L', 6], ['D', 8, 'B', 6, 'R', 8],
+  ];
+  run('LL-orient-edges', DL_EDGES.map(([f, i]) => [flatIdx(f, i), C[f]]), 12);
+  run('LL-orient-corners', DL_CORNERS.map(([f, i]) => [flatIdx(f, i), C[f]]), 12);
+  run('LL-permute-corners', DL_CORNERS.flatMap(([f1, i1, f2, i2, f3, i3]) => [
+    [flatIdx(f1, i1), C[f1]], [flatIdx(f2, i2), C[f2]], [flatIdx(f3, i3), C[f3]],
+  ]), 14);
+  const lastLayerConstraints = [];
+  for (const f of FACES) for (let i = 0; i < 9; i++) lastLayerConstraints.push([flatIdx(f, i), C[f]]);
+  run('LL-permute-edges', lastLayerConstraints, 14);
 
-  return { state: cur, moves: allMoves };
+  return { state: fromFlat(flat), moves: allMoves };
 }
 
-module.exports = { solve, bfs, centerColors, mvStr, key, MOVES };
+module.exports = { solve, idaSearch, centerColors, mvStr };
