@@ -110,19 +110,19 @@ function solve(initialState, log) {
   for (const e of CROSS_EDGES) {
     run(`cross-${e.side}`, [
       [flatIdx('U', e.uIdx), C.U], [flatIdx(e.side, e.sIdx), C[e.side]],
-    ], 10, 15000);
+    ], 10, 60000);
   }
   for (const c of FIRST_LAYER_CORNERS) {
     const [fa, fb] = c.faces;
     run(`corner-${c.faces.join('')}`, [
       [flatIdx('U', c.uIdx), C.U], [flatIdx(fa, c.aIdx), C[fa]], [flatIdx(fb, c.bIdx), C[fb]],
-    ], 10, 15000);
+    ], 10, 60000);
   }
   for (const e of SECOND_LAYER_EDGES) {
     const [fa, fb] = e.faces;
     run(`edge2-${e.faces.join('')}`, [
       [flatIdx(fa, e.aIdx), C[fa]], [flatIdx(fb, e.bIdx), C[fb]],
-    ], 10, 15000);
+    ], 12, 90000);
   }
 
   // Last layer, staged (classic orient-edges / orient-corners /
@@ -134,14 +134,14 @@ function solve(initialState, log) {
     ['D', 0, 'F', 6, 'L', 8], ['D', 2, 'F', 8, 'R', 6],
     ['D', 6, 'B', 8, 'L', 6], ['D', 8, 'B', 6, 'R', 8],
   ];
-  run('LL-orient-edges', DL_EDGES.map(([f, i]) => [flatIdx(f, i), C[f]]), 14, 20000);
-  run('LL-orient-corners', DL_CORNERS.map(([f, i]) => [flatIdx(f, i), C[f]]), 14, 20000);
+  run('LL-orient-edges', DL_EDGES.map(([f, i]) => [flatIdx(f, i), C[f]]), 14, 90000);
+  run('LL-orient-corners', DL_CORNERS.map(([f, i]) => [flatIdx(f, i), C[f]]), 14, 90000);
   run('LL-permute-corners', DL_CORNERS.flatMap(([f1, i1, f2, i2, f3, i3]) => [
     [flatIdx(f1, i1), C[f1]], [flatIdx(f2, i2), C[f2]], [flatIdx(f3, i3), C[f3]],
-  ]), 16, 30000);
+  ]), 18, 120000);
   const lastLayerConstraints = [];
   for (const f of FACES) for (let i = 0; i < 9; i++) lastLayerConstraints.push([flatIdx(f, i), C[f]]);
-  run('LL-permute-edges', lastLayerConstraints, 16, 30000);
+  run('LL-permute-edges', lastLayerConstraints, 18, 120000);
 
   return { state: fromFlat(flat), moves: allMoves };
 }
