@@ -221,30 +221,31 @@
   // whatever cube you're rendering.
   // Net layout: U above F; L, F, R, B in a row; D below F.
   const CUBE_STATE = {
-    U: ["K","K","R", "K","K","G", "O","O","K"],
-    L: ["G","G","G", "O","O","O", "B","B","B"],
-    F: ["K","K","O", "R","R","R", "Y","Y","G"],
-    R: ["B","B","O", "G","G","G", "Y","R","R"],
-    B: ["Y","O","O", "B","B","B", "K","Y","Y"],
-    D: ["Y","Y","Y", "R","O","O", "G","Y","B"]
+    U: ["G","B","O", "Y","Y","K", "K","R","B"],
+    F: ["B","G","O", "B","G","B", "G","R","Y"],
+    L: ["K","O","R", "O","R","O", "Y","K","K"],
+    R: ["K","O","Y", "Y","O","R", "B","G","R"],
+    B: ["G","K","R", "Y","B","G", "Y","Y","B"],
+    D: ["O","B","O", "R","K","K", "R","G","G"]
   };
 
   // The single move for this step. face: U/D/F/B/L/R.
   // direction: "CW" or "CCW", both meaning "viewed from outside,
   // looking straight at that face" — exactly how the diagram draws it.
-  const MOVE = { face: "R", direction: "CW" };
+  const MOVE = { face: "F", direction: "CW" };
 
   const STEP = {
-    number: 4,
-    total: 21,
-    phase: "🌑 Step 1: Black Cross",
-    orientation: "Hold it: Black on top, Green facing you",
-    instruction: "Turn the RIGHT layer this way →",
-    why: "See the red-and-green edge piece sitting in the bottom layer, " +
-      "under the spot where it needs to go? Turning the right layer this " +
-      "way lifts it up next to the yellow center without messing up the " +
-      "black edges we already placed. Any other turn would knock a " +
-      "finished piece out of place."
+    number: 1,
+    total: null,
+    phase: "Yellow Cross",
+    orientation: "Hold it just like you have it now: Yellow on top, Green facing you",
+    instruction: "Turn the FRONT layer this way (clockwise)",
+    why: "Look at the yellow-and-blue piece sitting on the front-right edge, " +
+      "between the front and right faces. It's stuck on the side, not " +
+      "touching the top or the bottom. Turning the front layer this way " +
+      "slides that piece down to the bottom. Once it's on the bottom, " +
+      "there's an easy trick to pop it straight up into place, right next " +
+      "to the yellow center on top."
   };
 
   // =====================================================================
@@ -373,8 +374,9 @@
   }
 
   function render() {
-    document.getElementById("phaseLine").textContent =
-      `${STEP.phase} · Step ${STEP.number} of ${STEP.total}`;
+    document.getElementById("phaseLine").textContent = STEP.total
+      ? `${STEP.phase} · Step ${STEP.number} of ${STEP.total}`
+      : `${STEP.phase} · Step ${STEP.number}`;
     document.getElementById("orientLine").textContent = STEP.orientation;
     document.getElementById("instructionLine").textContent = STEP.instruction;
     const faceNames = { U: "TOP", D: "BOTTOM", F: "FRONT", B: "BACK", L: "LEFT", R: "RIGHT" };
