@@ -1,0 +1,243 @@
+<title>Cube Tutor</title>
+
+<!--
+  Full-solve viewer. Unlike the old one-card-per-turn workflow, every
+  step for this exact scramble is baked into STEPS below, generated
+  once by the solver (see generate-viewer.js) — no more waiting on a
+  turn-by-turn conversation. Click Next after each physical move.
+-->
+
+<style>
+  :root {
+    --ink: #21242b;
+    --ink-soft: #565b66;
+    --paper: #e9edf1;
+    --surface: #ffffff;
+    --surface-line: #d7dce2;
+    --accent: #e8367a;
+    --accent-ink: #ffffff;
+    --focus: #1a6fd1;
+    --good: #0f9d58;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #edeef0; --ink-soft: #a7acb6; --paper: #14161a; --surface: #1d2024;
+      --surface-line: #2c3036; --accent: #ff5c93; --accent-ink: #1a0410; --focus: #6fb0ff; --good: #35d488;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #edeef0; --ink-soft: #a7acb6; --paper: #14161a; --surface: #1d2024;
+    --surface-line: #2c3036; --accent: #ff5c93; --accent-ink: #1a0410; --focus: #6fb0ff; --good: #35d488;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; padding: 24px 16px 48px;
+  }
+  .card {
+    width: 100%; max-width: 460px; background: var(--surface);
+    border: 1px solid var(--surface-line); border-radius: 20px;
+    padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .progress-track { height: 6px; border-radius: 999px; background: var(--surface-line); overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 200ms ease; }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .statusbar .phase { color: var(--accent); font-weight: 700; }
+  .instruction {
+    margin: 0; font-size: clamp(22px, 6vw, 28px); line-height: 1.15;
+    font-weight: 800; text-wrap: balance; letter-spacing: -0.01em; min-height: 2.4em;
+  }
+  .solved-banner {
+    display: none; text-align: center; padding: 28px 16px; font-size: 22px; font-weight: 800; color: var(--good);
+  }
+  .stage {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    background: var(--paper); border: 1px solid var(--surface-line); border-radius: 14px; padding: 16px 6px;
+  }
+  .stage svg { width: 100%; height: auto; }
+  .net-svg { max-width: 420px; }
+  .focus-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .focus-svg { max-width: 200px; }
+  .focus-label { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+  .why-toggle {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 8px;
+    background: transparent; border: 2px solid var(--accent); color: var(--accent);
+    font-weight: 700; font-size: 15px; border-radius: 999px; padding: 8px 16px; cursor: pointer;
+  }
+  .why-toggle[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
+  .why-panel {
+    margin: 0; padding: 14px 16px; background: var(--paper); border-left: 4px solid var(--accent);
+    border-radius: 0 10px 10px 0; font-size: 16px; line-height: 1.55; color: var(--ink); max-width: 62ch;
+  }
+  .why-panel[hidden] { display: none; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 4px; border-top: 1px solid var(--surface-line);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 12px; color: var(--ink-soft);
+  }
+  .legend .chip { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; border: 1px solid var(--surface-line); }
+  .nav { display: flex; gap: 10px; }
+  .nav button {
+    flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--surface-line);
+    background: var(--surface); color: var(--ink); font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .nav button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .nav button:disabled { opacity: 0.4; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) { .why-panel { animation: reveal 180ms ease-out; } }
+  @keyframes reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+
+<div class="card">
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="statusbar">
+    <span class="phase" id="phaseLine"></span>
+    <span id="stepCount"></span>
+  </div>
+  <h1 class="instruction" id="instructionLine"></h1>
+  <div id="solvedBanner" class="solved-banner">🎉 Solved! Great job.</div>
+  <div class="stage" id="stage"></div>
+  <button class="why-toggle" id="whyToggle" aria-expanded="false" aria-controls="whyPanel">
+    <span aria-hidden="true">🤔</span> Why this move?
+  </button>
+  <p class="why-panel" id="whyPanel" hidden></p>
+  <div class="legend" id="legend"></div>
+  <div class="nav">
+    <button id="prevBtn">← Back</button>
+    <button id="nextBtn" class="primary">Next →</button>
+  </div>
+</div>
+
+<script>
+  // =====================================================================
+  // DATA — generated once by generate-viewer.js from the solver's output.
+  // COLORS maps this cube's letters to real hex/names (swap for a
+  // different color set). ORIENTATION is the fixed hold used throughout.
+  // STEPS is the full move list with the state BEFORE each move.
+  // =====================================================================
+  const COLORS = __COLORS__;
+  const ORIENTATION = __ORIENTATION__;
+  const STEPS = __STEPS__;
+
+  // =====================================================================
+  // RENDERER — shared with the single-card template, unchanged.
+  // =====================================================================
+  const BLOCKS = { U: [1, 0], L: [0, 1], F: [1, 1], R: [2, 1], B: [3, 1], D: [1, 2] };
+  const UNIT = 34, GUTTER = 10, STEP_PX = UNIT * 3 + GUTTER;
+  function blockOrigin(face) { const [cb, rb] = BLOCKS[face]; return [cb * STEP_PX, rb * STEP_PX]; }
+  function arcPoint(cx, cy, r, deg) { const t = (deg * Math.PI) / 180; return [cx + r * Math.sin(t), cy - r * Math.cos(t)]; }
+  function arrowPath(cx, cy, r, clockwise) {
+    const [a0, a1] = clockwise ? [20, 320] : [340, 40];
+    const sweep = clockwise ? 1 : 0;
+    const p0 = arcPoint(cx, cy, r, a0), p1 = arcPoint(cx, cy, r, a1);
+    return `M ${p0[0].toFixed(1)} ${p0[1].toFixed(1)} A ${r} ${r} 0 1 ${sweep} ${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`;
+  }
+  function stickerCells(grid, unit, x0, y0) {
+    const parts = [];
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      const code = grid[i * 3 + j], c = COLORS[code];
+      const x = x0 + j * unit, y = y0 + i * unit, pad = unit >= 44 ? 3 : 2;
+      parts.push(`<rect x="${x + pad}" y="${y + pad}" width="${unit - pad * 2}" height="${unit - pad * 2}" rx="${unit >= 44 ? 6 : 4}" fill="${c.fill}" stroke="var(--ink)" stroke-width="1.5"></rect>`);
+      parts.push(`<text x="${x + unit / 2}" y="${y + unit / 2 + unit * 0.12}" text-anchor="middle" font-size="${unit >= 44 ? 18 : 12}" font-weight="700" font-family="ui-monospace, monospace" fill="${c.text}">${code}</text>`);
+    }
+    return parts.join('');
+  }
+  function buildNetSVG(state, move) {
+    const width = 4 * STEP_PX - GUTTER, height = 3 * STEP_PX - GUTTER;
+    const parts = [`<svg class="net-svg" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="All six faces of the cube, unfolded flat">`];
+    for (const face of Object.keys(BLOCKS)) { const [x0, y0] = blockOrigin(face); parts.push(stickerCells(state[face], UNIT, x0, y0)); }
+    if (move && move.face) {
+      const [x0, y0] = blockOrigin(move.face), size = UNIT * 3;
+      parts.push(`<rect x="${x0 - 4}" y="${y0 - 4}" width="${size + 8}" height="${size + 8}" rx="10" fill="none" stroke="var(--accent)" stroke-width="5"></rect>`);
+    }
+    parts.push('</svg>');
+    return parts.join('');
+  }
+  function buildFocusSVG(state, move) {
+    const unit = 54, size = unit * 3, pad = 44, canvas = size + pad * 2, x0 = pad, y0 = pad;
+    const parts = [`<svg class="focus-svg" viewBox="0 0 ${canvas} ${canvas}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Close-up of the face to turn, with an arrow showing which way">`];
+    parts.push(`<defs><marker id="arrowhead" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="var(--accent)"></path></marker></defs>`);
+    parts.push(`<rect x="${x0 - 5}" y="${y0 - 5}" width="${size + 10}" height="${size + 10}" rx="12" fill="none" stroke="var(--accent)" stroke-width="4"></rect>`);
+    parts.push(stickerCells(state[move.face], unit, x0, y0));
+    const cx = canvas / 2, cy = canvas / 2, r = size / 2 + 26;
+    const d = arrowPath(cx, cy, r, move.direction === 'CW');
+    parts.push(`<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round" marker-end="url(#arrowhead)"></path>`);
+    parts.push('</svg>');
+    return parts.join('');
+  }
+
+  // =====================================================================
+  // NAVIGATION
+  // =====================================================================
+  let idx = 0;
+  const faceNames = { U: 'TOP', D: 'BOTTOM', F: 'FRONT', B: 'BACK', L: 'LEFT', R: 'RIGHT' };
+
+  function render() {
+    const total = STEPS.length;
+    document.getElementById('progressFill').style.width = `${(idx / total) * 100}%`;
+    document.getElementById('stepCount').textContent = idx >= total ? `${total} of ${total}` : `${idx + 1} of ${total}`;
+
+    if (idx >= total) {
+      document.getElementById('phaseLine').textContent = 'Done';
+      document.getElementById('instructionLine').style.display = 'none';
+      document.getElementById('solvedBanner').style.display = 'block';
+      document.getElementById('stage').innerHTML = '';
+      document.getElementById('whyToggle').style.display = 'none';
+      document.getElementById('whyPanel').hidden = true;
+      document.getElementById('legend').innerHTML = '';
+      document.getElementById('prevBtn').disabled = false;
+      document.getElementById('nextBtn').disabled = true;
+      return;
+    }
+
+    document.getElementById('instructionLine').style.display = '';
+    document.getElementById('solvedBanner').style.display = 'none';
+    document.getElementById('whyToggle').style.display = '';
+
+    const step = STEPS[idx];
+    document.getElementById('phaseLine').textContent = step.phase;
+    const dirWord = step.move.double ? 'halfway around (180°)' : (step.move.direction === 'CW' ? 'clockwise' : 'counter-clockwise');
+    document.getElementById('instructionLine').textContent =
+      idx === 0 ? `Hold it: ${ORIENTATION}. Then turn the ${faceNames[step.move.face]} layer ${dirWord}.`
+                : `Turn the ${faceNames[step.move.face]} layer ${dirWord}.`;
+
+    document.getElementById('stage').innerHTML = `
+      ${buildNetSVG(step.state, step.move)}
+      <div class="focus-wrap">
+        <span class="focus-label">${faceNames[step.move.face]} face, up close · turn ${dirWord}</span>
+        ${buildFocusSVG(step.state, step.move)}
+      </div>
+    `;
+
+    const toggle = document.getElementById('whyToggle');
+    const panel = document.getElementById('whyPanel');
+    toggle.setAttribute('aria-expanded', 'false');
+    panel.hidden = true;
+    panel.textContent = step.why;
+
+    const legend = document.getElementById('legend');
+    legend.innerHTML = Object.entries(COLORS).map(([code, c]) =>
+      `<span class="chip"><span class="swatch" style="background:${c.fill}"></span>${code} = ${c.name}</span>`
+    ).join('');
+
+    document.getElementById('prevBtn').disabled = idx === 0;
+    document.getElementById('nextBtn').disabled = false;
+    document.getElementById('nextBtn').textContent = idx === total - 1 ? 'Finish →' : 'Next →';
+  }
+
+  document.getElementById('whyToggle').addEventListener('click', () => {
+    const t = document.getElementById('whyToggle');
+    const open = t.getAttribute('aria-expanded') === 'true';
+    t.setAttribute('aria-expanded', String(!open));
+    document.getElementById('whyPanel').hidden = open;
+  });
+  document.getElementById('nextBtn').addEventListener('click', () => { idx = Math.min(STEPS.length, idx + 1); render(); });
+  document.getElementById('prevBtn').addEventListener('click', () => { idx = Math.max(0, idx - 1); render(); });
+
+  render();
+</script>
